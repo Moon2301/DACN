@@ -58,7 +58,7 @@ namespace DACN.Controllers
 
             // --- 3. Validate phân trang ---
             if (page <= 0) page = 1;
-            // Job của ông lấy Top 100, nên limit tối đa là 100
+            // Job lấy Top 100, nên limit tối đa là 100
             if (limit <= 0 || limit > 100) limit = 20;
 
             // --- 4. Tính toán Rank (thay vì Skip/Take) ---
@@ -67,8 +67,7 @@ namespace DACN.Controllers
             var rankStart = (page - 1) * limit + 1;
             var rankEnd = page * limit;
 
-            // --- 5. Query "siêu ngu" ---
-            // Chỉ SELECT, không JOIN, không GroupBy, không OrderBy (vì đã làm hết)
+            // --- 5. Query ---
             try
             {
                 var query = _context.StoryRankings

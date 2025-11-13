@@ -105,23 +105,91 @@ public class HangfireJobService
             .ToListAsync();
         await SaveRankings(monthReads, RankingType.READS_MONTH_ALL, null);
 
-        // --- 4. Tính BXH Theo Genre (Vòng lặp) ---
-        var allGenreIds = await _context.Genres.Where(g => !g.IsDeleted).Select(g => g.GenreId).ToListAsync();
-        foreach (var genreId in allGenreIds)
-        {
-            // Ngày
-            var dayGenreReads = await _context.ChapterReadedByUsers
-                .Where(r => r.ReadAt >= today && r.Chapter.Story.GenreId == genreId)
-                .GroupBy(r => r.Chapter.StoryId)
-                .Select(g => new { StoryId = g.Key, Reads = g.Count() })
-                .OrderByDescending(x => x.Reads)
-                .Take(100)
-                .Select(x => new ValueTuple<int, int>(x.StoryId, x.Reads))
-                .ToListAsync();
-            await SaveRankings(dayGenreReads, RankingType.READS_DAY_GENRE, genreId);
+        // --- 4. Tính BXH Theo Genre (Tối ưu: 1 query) ---
+        //ngày
+        var allDayGenreReads = await _context.ChapterReadedByUsers
+            .Where(r => r.ReadAt >= today && r.Chapter.Story.GenreId != null) // Lấy hết
+            .GroupBy(r => new { r.Chapter.StoryId, r.Chapter.Story.GenreId }) // Nhóm 2 chiều
+            .Select(g => new
+            {
+                StoryId = g.Key.StoryId,
+                GenreId = g.Key.GenreId, // Lấy GenreId
+                Reads = g.Count()
+            })
+            .ToListAsync();
 
-            // (Bạn tự làm tương tự cho Tuần (READS_WEEK_GENRE) và Tháng (READS_MONTH_GENRE))
+        // Giờ nhóm lại bằng C# (cực nhanh)
+        var groupedByGenre = allDayGenreReads
+            .GroupBy(x => x.GenreId)
+            .Select(g => new
+            {
+                GenreId = g.Key,
+                Ranks = g.OrderByDescending(x => x.Reads)
+                         .Take(100)
+                         .Select(x => new ValueTuple<int, int>(x.StoryId, x.Reads))
+                         .ToList()
+            });
+
+        // Lặp qua kết quả đã xử lý (không query DB nữa)
+        foreach (var genreRank in groupedByGenre)
+        {
+            await SaveRankings(genreRank.Ranks, RankingType.READS_DAY_GENRE, genreRank.GenreId);
         }
+        // tuần
+        var allWeekGenreReads = await _context.ChapterReadedByUsers
+            .Where(r => r.ReadAt >= startOfWeek && r.Chapter.Story.GenreId != null)
+            .GroupBy(r => new { r.Chapter.StoryId, r.Chapter.Story.GenreId })
+            .Select(g => new
+            {
+                StoryId = g.Key.StoryId,
+                GenreId = g.Key.GenreId,
+                Reads = g.Count()
+            })
+            .ToListAsync();
+
+        var groupedWeekByGenre = allWeekGenreReads
+            .GroupBy(x => x.GenreId)
+            .Select(g => new
+            {
+                GenreId = g.Key,
+                Ranks = g.OrderByDescending(x => x.Reads)
+                         .Take(100)
+                         .Select(x => new ValueTuple<int, int>(x.StoryId, x.Reads))
+                         .ToList()
+            });
+
+        foreach (var genreRank in groupedWeekByGenre)
+            {
+            await SaveRankings(genreRank.Ranks, RankingType.READS_WEEK_GENRE, genreRank.GenreId);
+        }
+        // tháng
+
+        var allMonthGenreReads = await _context.ChapterReadedByUsers
+            .Where(r => r.ReadAt >= startOfMonth && r.Chapter.Story.GenreId != null)
+            .GroupBy(r => new { r.Chapter.StoryId, r.Chapter.Story.GenreId })
+            .Select(g => new
+            {
+                StoryId = g.Key.StoryId,
+                GenreId = g.Key.GenreId,
+                Reads = g.Count()
+            })
+            .ToListAsync();
+
+        var groupedMonthByGenre = allMonthGenreReads
+            .GroupBy(x => x.GenreId)
+            .Select(g => new
+            {
+                GenreId = g.Key,
+                Ranks = g.OrderByDescending(x => x.Reads)
+                         .Take(100)
+                         .Select(x => new ValueTuple<int, int>(x.StoryId, x.Reads))
+                         .ToList()
+            });
+        foreach (var genreRank in groupedMonthByGenre)
+            {
+            await SaveRankings(genreRank.Ranks, RankingType.READS_MONTH_GENRE, genreRank.GenreId);
+        }
+
 
         await _context.SaveChangesAsync();
     }
