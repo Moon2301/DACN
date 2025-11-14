@@ -30,7 +30,7 @@ public class HangfireJobService
         var storyIds = ranks.Select(r => r.StoryId).ToList();
         var storiesData = await _context.Stories
             .Where(s => storyIds.Contains(s.StoryId))
-            .Select(s => new { s.StoryId, s.Title, s.Author, s.CoverImage })
+            .Select(s => new { s.StoryId, s.Title, s.Author, s.CoverImage, GenreName = s.Genre.Name })
             .ToDictionaryAsync(s => s.StoryId);
 
         var rankPosition = 1;
@@ -48,6 +48,7 @@ public class HangfireJobService
                     StoryId = story.StoryId,
                     StoryTitle = story.Title,
                     Author = story.Author,
+                    GenreName = story.GenreName,
                     CoverImage = story.CoverImage,
                     Score = rank.Score,
                     GeneratedAt = generatedAt
@@ -69,7 +70,12 @@ public class HangfireJobService
 
         // Xóa BXH lượt đọc cũ
         await _context.StoryRankings
-            .Where(r => r.Type.ToString().StartsWith("READS_"))
+            .Where(r => r.Type == RankingType.READS_DAY_ALL ||
+                        r.Type == RankingType.READS_WEEK_ALL ||
+                        r.Type == RankingType.READS_MONTH_ALL ||
+                        r.Type == RankingType.READS_DAY_GENRE ||
+                        r.Type == RankingType.READS_WEEK_GENRE ||
+                        r.Type == RankingType.READS_MONTH_GENRE)
             .ExecuteDeleteAsync();
 
         // --- 1. Tính BXH Ngày (All) ---
@@ -259,7 +265,7 @@ public class HangfireJobService
             // 1. Cộng vé hàng loạt
             await _context.Users
                 .Where(u => userIds.Contains(u.UserId))
-                .ExecuteUpdateAsync(s => s.SetProperty(u => u.Ticket, u => u.Ticket + amountToGrant));
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.Ticket, u => amountToGrant));
 
             // 2. Ghi log hàng loạt
             var logs = userIds.Select(id => new TicketTransaction
@@ -279,7 +285,49 @@ public class HangfireJobService
         catch (Exception)
         {
             await dbTransaction.RollbackAsync();
-            // (Thêm log lỗi ở đây)
+            // (Thêm log lỗi ở đây nếu cần)
         }
+
+    }
+
+    // --- JOB 6: BXH Toàn Thời Gian (Rating, Follow, Reads) ---
+    // (Chạy 1 lần/ngày là đủ)
+    public async Task UpdateGlobalRankings()
+    {
+        // 1. Xóa BXH cũ
+        await _context.StoryRankings
+            .Where(r => r.Type == RankingType.RATING_ALL ||
+                        r.Type == RankingType.FOLLOWERS_ALL ||
+                        r.Type == RankingType.READS_ALL_TIME_ALL)
+            .ExecuteDeleteAsync();
+
+        // 2. Tính Top Rating
+        var ratingRanks = await _context.Stories
+            .Where(s => !s.IsDeleted && s.TotalRatings > 10) // Lọc nhiễu (ví dụ: > 10 đánh giá)
+            .OrderByDescending(s => s.AverageRating)
+            .Take(100)
+            .Select(s => new ValueTuple<int, int>(s.StoryId, (int)(s.AverageRating * 100))) // Score là 4.50 -> 450
+            .ToListAsync();
+        await SaveRankings(ratingRanks, RankingType.RATING_ALL, null);
+
+        // 3. Tính Top Followers
+        var followerRanks = await _context.Stories
+            .Where(s => !s.IsDeleted)
+            .OrderByDescending(s => s.TotalFollowers)
+            .Take(100)
+            .Select(s => new ValueTuple<int, int>(s.StoryId, s.TotalFollowers)) // Score là TotalFollowers
+            .ToListAsync();
+        await SaveRankings(followerRanks, RankingType.FOLLOWERS_ALL, null);
+
+        // 4. Tính Top All-Time Reads
+        var allTimeReadsRanks = await _context.Stories
+            .Where(s => !s.IsDeleted)
+            .OrderByDescending(s => s.TotalReads)
+            .Take(100)
+            .Select(s => new ValueTuple<int, int>(s.StoryId, s.TotalReads)) // Score là TotalReads
+            .ToListAsync();
+        await SaveRankings(allTimeReadsRanks, RankingType.READS_ALL_TIME_ALL, null);
+
+        await _context.SaveChangesAsync();
     }
 }

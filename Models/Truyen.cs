@@ -14,7 +14,7 @@ namespace DACN.Models
         public string? DateOfBirth { get; set; }
         public string? Bio { get; set; } = string.Empty;
         public UserRole Role { get; set; } = UserRole.User;
-        public string? AvatarUrl { get; set; }
+        public string? AvatarUrl { get; set; } = "/images/defaul/defaulAvatar.png";
         public int Money { get; set; } = 0;
         public int ActivePoint { get; set; } = 0;
         public int Ticket { get; set; } = 0;
@@ -96,7 +96,7 @@ namespace DACN.Models
 
         public string Author { get; set; }
         public string Description { get; set; }
-        public string CoverImage { get; set; }
+        public string CoverImage { get; set; } = "/images/defaul/defaulImage.png";
 
         public StoryStatus Status { get; set; } = StoryStatus.DangCapNhat;
 

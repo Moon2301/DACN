@@ -113,6 +113,7 @@ namespace DACN.Dtos
         public decimal AverageRating { get; set; }
         public int TotalFollowers { get; set; }
         public int TotalComments { get; set; }
+        public int TotalChapters { get; set; }
     }
 
     // DTO để TẠO MỚI Story

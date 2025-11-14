@@ -1,6 +1,8 @@
 ﻿using DACN.Data;
 using DACN.Dtos;
+using DACN.Helpers;
 using DACN.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,54 +13,147 @@ namespace DACN.Controllers
     public class StoriesController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IConfiguration _config;
 
-        public StoriesController(AppDbContext context)
+        public StoriesController(AppDbContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
         }
 
+        // Vì query Story DTO rất phức tạp, đưa nó vào 1 IQueryable
         // HÀM HELPER ĐỂ DÙNG CHUNG
-        // Vì query Story DTO rất phức tạp, chúng ta đưa nó vào 1 IQueryable
-        private IQueryable<StoryDto> GetStoriesAsDto()
+        private IQueryable<Story> GetStoriesAsQueryable( 
+            string? searchTerm = null,
+            int? genreId = null,
+            int? tagId = null,
+            StoryStatus? status = null)
         {
-            return _context.Stories
-                .Where(s => s.IsDeleted == false)
-                .Include(s => s.Genre) // Lấy Genre
-                .Include(s => s.UploadedBy) // Lấy User
-                .Include(s => s.StoryTags) // Lấy bảng nối
-                    .ThenInclude(st => st.Tag) // Từ bảng nối lấy Tag
-                .Select(s => new StoryDto
-                {
-                    StoryId = s.StoryId,
-                    Title = s.Title,
-                    Author = s.Author,
-                    Description = s.Description,
-                    CoverImage = s.CoverImage,
-                    Status = s.Status,
-                    GenreId = s.GenreId,
-                    GenreName = s.Genre.Name, // Lấy tên từ Genre
-                    UploadedByUserId = s.UploadedByUserId,
-                    UploadedByUsername = s.UploadedBy.Username, // Lấy tên từ User
-                    CreatedAt = s.CreatedAt,
-                    UpdatedAt = s.UpdatedAt,
-                    // Map danh sách StoryTag -> List<string> Tags
-                    Tags = s.StoryTags.Select(st => st.Tag.Name).ToList(),
-                    // Lấy các trường thống kê
-                    TotalReads = s.TotalReads,
-                    AverageRating = s.AverageRating,
-                    TotalFollowers = s.TotalFollowers,
-                    TotalComments = s.TotalComments
-                });
-        }
+            var query = _context.Stories
+                              .Where(s => s.IsDeleted == false);
 
+            // 1. Lọc theo searchTerm
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                var lowerSearchTerm = searchTerm.ToLower();
+                query = query.Where(s => s.Title.ToLower().Contains(lowerSearchTerm) ||
+                                         s.Author.ToLower().Contains(lowerSearchTerm));
+            }
+
+            // 2. Lọc theo GenreId
+            if (genreId.HasValue)
+            {
+                query = query.Where(s => s.GenreId == genreId.Value);
+            }
+
+            // 3. Lọc theo TagId
+            if (tagId.HasValue)
+            {
+                query = query.Where(s => s.StoryTags.Any(st => st.TagId == tagId.Value));
+            }
+
+            // 4. Lọc theo Status
+            if (status.HasValue)
+            {
+                query = query.Where(s => s.Status == status.Value);
+            }
+
+            // 5. TRẢ VỀ QUERY GỐC (Đã Include, nhưng KHÔNG Select)
+            return query
+                .Include(s => s.Genre)
+                .Include(s => s.UploadedBy)
+                .Include(s => s.StoryTags)
+                    .ThenInclude(st => st.Tag);
+        }
+        // HÀM MAP DÙNG CHUNG (C#)
+        private StoryDto MapToDto(Story s)
+        {
+            return new StoryDto
+            {
+                StoryId = s.StoryId,
+                Title = s.Title,
+                Author = s.Author,
+                Description = s.Description,
+                CoverImage = UrlHelper.ResolveImageUrl(s.CoverImage), // <-- GỌI HELPER Ở ĐÂY
+                Status = s.Status,
+                GenreId = s.GenreId,
+                GenreName = s.Genre?.Name, // Thêm ?.Name cho an toàn
+                UploadedByUserId = s.UploadedByUserId,
+                UploadedByUsername = s.UploadedBy?.Username, // Thêm ?.Username
+                CreatedAt = s.CreatedAt,
+                UpdatedAt = s.UpdatedAt,
+                Tags = s.StoryTags.Select(st => st.Tag.Name).ToList(),
+                TotalReads = s.TotalReads,
+                AverageRating = s.AverageRating,
+                TotalFollowers = s.TotalFollowers,
+                TotalComments = s.TotalComments,
+                TotalChapters = s.TotalChapters
+            };
+        }
+        //Hết helper
 
         // GET: api/stories
-        // Lấy tất cả truyện
+        // Lấy tất cả truyện (có lọc, tìm kiếm, sắp xếp, phân trang)
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<StoryDto>>> GetStories()
+        [AllowAnonymous] 
+        public async Task<ActionResult<IEnumerable<StoryDto>>> GetStories(
+            [FromQuery] string? searchTerm = null,  // Từ khóa tìm kiếm (title, author)
+            [FromQuery] int? genreId = null,       // Lọc theo ID thể loại
+            [FromQuery] int? tagId = null,         // Lọc theo ID tag
+            [FromQuery] StoryStatus? status = null,// Lọc theo trạng thái
+            [FromQuery] string? sortBy = null,      // Sắp xếp (latest, top_reads, ...)
+            [FromQuery] int page = 1,              // Phân trang
+            [FromQuery] int limit = 20)
         {
-            var stories = await GetStoriesAsDto().ToListAsync();
-            return Ok(stories);
+            // 1. Validate phân trang
+            if (page <= 0) page = 1;
+            if (limit <= 0) limit = 20;
+            if (limit > 100) limit = 100; // Bảo vệ server
+
+            try
+            {
+                // 1. Lấy IQueryable<Story> (model gốc)
+                var query = GetStoriesAsQueryable(searchTerm, genreId, tagId, status); // <-- Gọi hàm mới
+
+                // 2. Áp dụng SẮP XẾP (trên IQueryable)
+                switch (sortBy?.ToLower())
+                {
+                    case "latest":
+                        query = query.OrderByDescending(s => s.UpdatedAt);
+                        break;
+                    // ... (các case khác) ...
+                    default:
+                        query = query.OrderByDescending(s => s.UpdatedAt);
+                        break;
+                }
+
+                // 3. Áp dụng PHÂN TRANG (trên IQueryable)
+                var offset = (page - 1) * limit;
+                var totalStories = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalStories / (double)limit);
+
+                // 4. GỌI DATABASE (CHỈ 1 LẦN)
+                var stories_from_db = await query
+                    .Skip(offset)
+                    .Take(limit)
+                    .ToListAsync();
+
+                // 5. MAP SANG DTO (CHẠY TRONG C#)
+                var dtos = stories_from_db.Select(MapToDto).ToList();
+
+                // 6. Trả về kết quả
+                return Ok(new
+                {
+                    success = true,
+                    currentPage = page,
+                    totalPages = totalPages,
+                    data = dtos // <-- Trả về list DTOs đã map
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = "Lỗi máy chủ nội bộ." });
+            }
         }
 
         // GET: api/stories/5
@@ -66,15 +161,15 @@ namespace DACN.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<StoryDto>> GetStory(int id)
         {
-            var story = await GetStoriesAsDto()
-                .FirstOrDefaultAsync(s => s.StoryId == id);
+            var story = await GetStoriesAsQueryable() // 1. Lấy query gốc
+                .FirstOrDefaultAsync(s => s.StoryId == id); // 2. Rút data
 
             if (story == null)
             {
                 return NotFound("Không tìm thấy truyện.");
             }
 
-            return Ok(story);
+            return Ok(MapToDto(story)); // 3. Map (dùng C#)
         }
 
         // GET: api/stories/user/5
@@ -89,11 +184,11 @@ namespace DACN.Controllers
                 return NotFound("Không tìm thấy người dùng này.");
             }
 
-            var stories = await GetStoriesAsDto()
+            var stories = await GetStoriesAsQueryable() // 1. Lấy query gốc
                 .Where(s => s.UploadedByUserId == userId)
-                .ToListAsync();
+                .ToListAsync(); // 2. Rút data
 
-            return Ok(stories);
+            return Ok(stories.Select(MapToDto).ToList()); // 3. Map (dùng C#)
         }
 
         // POST: api/stories
@@ -140,7 +235,10 @@ namespace DACN.Controllers
             await _context.SaveChangesAsync();
 
             // Lấy lại DTO để trả về (cách an toàn)
-            var resultDto = await GetStoriesAsDto().FirstOrDefaultAsync(s => s.StoryId == newStory.StoryId);
+            var resultStory = await GetStoriesAsQueryable() // 1. Lấy query gốc
+                .FirstOrDefaultAsync(s => s.StoryId == newStory.StoryId); // 2. Rút data
+
+            var resultDto = MapToDto(resultStory); // 3. Map (dùng C#)
 
             return CreatedAtAction(nameof(GetStory), new { id = newStory.StoryId }, resultDto);
         }
@@ -241,32 +339,27 @@ namespace DACN.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int limit = 20)
         {
-            // 1. Đảm bảo tham số hợp lệ
             if (page <= 0) page = 1;
             if (limit <= 0) limit = 20;
-            if (limit > 100) limit = 100;
+            if (limit > 100) limit = 100; // Bảo vệ server
 
-            // 2. Tính toán offset (bỏ qua bao nhiêu bản ghi)
             var offset = (page - 1) * limit;
 
             try
             {
-                
-                var query = GetStoriesAsDto();
-
+                var query = GetStoriesAsQueryable(); // 1. Lấy query gốc
                 var stories = await query
-                    .OrderByDescending(s => s.UpdatedAt) // Sắp xếp theo UpdatedAt (mới nhất)
-                    .Skip(offset)                      // Bỏ qua các trang trước
-                    .Take(limit)                       // Lấy số lượng "limit"
-                    .ToListAsync();                    // Thực thi query
+                    .OrderByDescending(s => s.UpdatedAt)
+                    .Skip(offset)
+                    .Take(limit)
+                    .ToListAsync(); // 2. Rút data
 
-                // 5. Trả về kết quả
-                return Ok(stories);
+                return Ok(stories.Select(MapToDto).ToList()); // 3. Map (dùng C#)
             }
             catch (Exception ex)
             {
-                // Console.WriteLine(ex.Message);
-                return StatusCode(500, "Lỗi máy chủ nội bộ. Xin thử lại sau.");
+                // (Log lỗi 'ex' nếu cần)
+                return StatusCode(500, new { success = false, message = "Lỗi máy chủ nội bộ." });
             }
         }
     }

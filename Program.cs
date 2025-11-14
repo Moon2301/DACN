@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Filters;
+using DACN.Helpers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -54,7 +55,12 @@ builder.Services.AddAuthorization(); // Thêm dịch vụ Authorization (nếu c
 // === HẾT CẤU HÌNH AUTH ===
 
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // đổi Enum thành Chuỗi
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -87,11 +93,26 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 
 
 var app = builder.Build();
+
+// --- BẮT ĐẦU CẤU HÌNH HELPER ---
+// Lấy dịch vụ IConfiguration 
+var config = app.Services.GetRequiredService<IConfiguration>();
+UrlHelper.Initialize(config);
+// --- HẾT CẤU HÌNH HELPER ---
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -102,8 +123,11 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 
 
 //Đăng ký các Job
@@ -121,6 +145,9 @@ RecurringJob.AddOrUpdate<HangfireJobService>("het-han-vip",
 RecurringJob.AddOrUpdate<HangfireJobService>("phat-ve-hang-tuan",
     job => job.GrantWeeklyTickets(),
     Cron.Weekly(DayOfWeek.Monday, 4, 0)); // 4h sáng Thứ Hai
+RecurringJob.AddOrUpdate<HangfireJobService>("bxh-global",
+    job => job.UpdateGlobalRankings(),
+    Cron.Daily(3, 0)); // 4h sáng
 
 app.MapControllers();
 app.Run();

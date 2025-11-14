@@ -45,7 +45,7 @@ namespace DACN.Controllers
             // --- 2. Validate 'genreId' (Rất quan trọng) ---
             bool isGenreRanking = rankingType.ToString().EndsWith("_GENRE");
 
-            if (isGenreRanking && !genreId.HasValue)
+            if (isGenreRanking && (!genreId.HasValue || genreId.Value == 0))
             {
                 // Nếu là BXH Genre, BẮT BUỘC phải có genreId
                 return BadRequest(new { success = false, message = "Cần cung cấp 'genreId' cho loại BXH này." });

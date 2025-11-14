@@ -27,6 +27,7 @@ namespace DACN.Models
         // (Không cần JOIN bảng Story khi lấy BXH)
         public string StoryTitle { get; set; }
         public string Author { get; set; }
+        public string GenreName { get; set; }
         public string CoverImage { get; set; }
 
         // Điểm số (số lượt đọc, số vé)
@@ -47,6 +48,9 @@ namespace DACN.Models
         READS_WEEK_GENRE,
         READS_MONTH_GENRE,
 
-        TICKETS_MONTH_ALL
+        TICKETS_MONTH_ALL,
+        RATING_ALL,         
+        FOLLOWERS_ALL,   
+        READS_ALL_TIME_ALL  
     }
 }

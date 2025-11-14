@@ -80,7 +80,7 @@ namespace DACN.Data
 
             modelBuilder.Entity<Story>()
                 .Property(e => e.UpdatedAt)
-                .HasDefaultValueSql(utcNowFunction); // Cần trigger hoặc xử lý C# để tự động cập nhật
+                .HasDefaultValueSql(utcNowFunction); // Xử lý C# để tự động cập nhật
 
             modelBuilder.Entity<Chapter>()
                 .Property(e => e.CreatedAt)
@@ -155,9 +155,7 @@ namespace DACN.Data
                 .HasOne(f => f.CurrentChapter)
                 .WithMany() // Chapter không cần biết nó được "follow"
                 .HasForeignKey(f => f.CurrentChapterId)
-                .OnDelete(DeleteBehavior.ClientSetNull); // Nếu chương bị xóa, set ID này = null
-                                                         // --- CẤU HÌNH HÀNH VI XÓA (DELETE BEHAVIOR) ---
-                                                         // Thêm vào OnModelCreating trong AppDbContext.cs
+                .OnDelete(DeleteBehavior.ClientSetNull);                                                          
 
             // User → Bookmarks
             modelBuilder.Entity<Bookmark>()
@@ -379,8 +377,8 @@ namespace DACN.Data
                 IsDeleted = false,
                 Money = 999999,
                 ActivePoint = 999999,
-                Ticket = 999999,
-                AvatarUrl = "/images/defaulAvatar.png",
+                Ticket = 0,
+                AvatarUrl = "/images/defaul/defaulAvatar.png",
                 Bio = "Default admin account"
             });
         }
