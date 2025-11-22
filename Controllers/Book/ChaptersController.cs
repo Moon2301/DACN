@@ -101,32 +101,62 @@ namespace DACN.Controllers
 
         // GET: api/chapters/5
         // Lấy chi tiết 1 chương (CÓ CONTENT)
+        // Trong ChaptersController.cs
+
         [HttpGet("{id}")]
         public async Task<ActionResult<ChapterDetailDto>> GetChapter(int id)
         {
-            var chapter = await _context.Chapters
-                .Where(c => c.ChapterId == id && c.IsDeleted == false)
-                .Select(c => new ChapterDetailDto
-                {
-                    ChapterId = c.ChapterId,
-                    StoryId = c.StoryId,
-                    ChapterNumber = c.ChapterNumber,
-                    Title = c.Title,
-                    Content = c.Content, // Lấy content
-                    CreatedAt = c.CreatedAt,
-                    IsVip = c.IsVip,
-                    VipUnlockAt = c.VipUnlockAt,
-                    UnlockPriceMoney = c.UnlockPriceMoney,
-                    UnlockPriceActivePoint = c.UnlockPriceActivePoint
-                })
-                .FirstOrDefaultAsync();
+            // 1. Lấy chapter hiện tại (nhớ Include cả Story)
+            var currentChapter = await _context.Chapters
+                .AsNoTracking() // Dùng AsNoTracking cho nhanh vì chỉ đọc
+                .FirstOrDefaultAsync(c => c.ChapterId == id && !c.IsDeleted);
 
-            if (chapter == null)
+            if (currentChapter == null)
             {
                 return NotFound("Không tìm thấy chương.");
             }
 
-            return Ok(chapter);
+            // 2. Lấy StoryId và ChapterNumber của nó
+            var storyId = currentChapter.StoryId;
+            var currentNumber = currentChapter.ChapterNumber;
+
+            // 3. TÌM CHƯƠNG TRƯỚC (Previous)
+            // Là chương CÙNG StoryId, số chương NHỎ HƠN, và LỚN NHẤT
+            var prevChapter = await _context.Chapters
+                .Where(c => c.StoryId == storyId &&
+                            c.ChapterNumber < currentNumber &&
+                            !c.IsDeleted)
+                .OrderByDescending(c => c.ChapterNumber) // Sắp xếp giảm dần
+                .Select(c => new { c.ChapterId }) // Chỉ cần lấy ID
+                .FirstOrDefaultAsync(); // Lấy cái đầu tiên (là cái lớn nhất)
+
+            // 4. TÌM CHƯƠNG SAU (Next)
+            // Là chương CÙNG StoryId, số chương LỚN HƠN, và NHỎ NHẤT
+            var nextChapter = await _context.Chapters
+                .Where(c => c.StoryId == storyId &&
+                            c.ChapterNumber > currentNumber &&
+                            !c.IsDeleted)
+                .OrderBy(c => c.ChapterNumber) // Sắp xếp tăng dần
+                .Select(c => new { c.ChapterId }) // Chỉ cần lấy ID
+                .FirstOrDefaultAsync(); // Lấy cái đầu tiên (là cái nhỏ nhất)
+
+            // 5. Tạo DTO trả về
+            var chapterDto = new ChapterDetailDto
+            {
+                ChapterId = currentChapter.ChapterId,
+                StoryId = currentChapter.StoryId,
+                Title = currentChapter.Title,
+                Content = currentChapter.Content, // Giả sử bồ có cột Content
+                ChapterNumber = currentChapter.ChapterNumber,
+                CreatedAt = currentChapter.CreatedAt,
+
+                // Gán 2 ID tìm được vào
+                // Dùng ?.ChapterId để nếu prevChapter là null thì nó trả về null
+                PreviousChapterId = prevChapter?.ChapterId,
+                NextChapterId = nextChapter?.ChapterId
+            };
+
+            return Ok(chapterDto);
         }
 
         // PUT: api/chapters/5

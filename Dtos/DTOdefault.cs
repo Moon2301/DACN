@@ -8,6 +8,7 @@ namespace DACN.Dtos
     {
         public int GenreId { get; set; }
         public string Name { get; set; }
+        public int BookCount { get; set; }
     }
 
     // DTO để tạo/cập nhật
@@ -22,6 +23,7 @@ namespace DACN.Dtos
     {
         public int TagId { get; set; }
         public string Name { get; set; }
+        public int BookCount { get; set; }
     }
 
     // DTO để tạo/cập nhật
@@ -180,6 +182,9 @@ namespace DACN.Dtos
         public DateTime? VipUnlockAt { get; set; }
         public int UnlockPriceMoney { get; set; }
         public int UnlockPriceActivePoint { get; set; }
+
+        public int? PreviousChapterId { get; set; }
+        public int? NextChapterId { get; set; }
     }
 
     // DTO để TẠO MỚI / CẬP NHẬT
@@ -380,5 +385,16 @@ namespace DACN.Dtos
 
         [Required]
         public int ChapterId { get; set; }
+    }
+    public class ReadHistorySummaryDto
+    {
+        public int StoryId { get; set; }
+        public string StoryTitle { get; set; }
+        public string StoryCoverImage { get; set; }
+        public int LastReadChapterId { get; set; }
+        public int LastReadChapterNumber { get; set; }
+        public string LastReadChapterTitle { get; set; }
+        public DateTime ReadAt { get; set; }
+        public int TotalChapters { get; set; }
     }
 }

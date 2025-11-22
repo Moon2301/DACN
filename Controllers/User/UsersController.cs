@@ -30,7 +30,7 @@ namespace DACN.Controllers
                 DateOfBirth = user.DateOfBirth,
                 Bio = user.Bio,
                 Role = user.Role,
-                AvatarUrl = user.AvatarUrl,
+                AvatarUrl = UrlHelper.ResolveImageUrl( user.AvatarUrl),
                 Money = user.Money,
                 ActivePoint = user.ActivePoint,
                 Ticket = user.Ticket,

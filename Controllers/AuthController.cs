@@ -129,7 +129,7 @@ namespace DACN.Controllers
                 Money = user.Money,
                 ActivePoint = user.ActivePoint,
                 Ticket = user.Ticket,
-                AvatarUrl = user.AvatarUrl 
+                AvatarUrl = UrlHelper.ResolveImageUrl(user.AvatarUrl)
             };
         }
     }

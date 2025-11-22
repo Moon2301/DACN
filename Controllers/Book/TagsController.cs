@@ -27,7 +27,8 @@ namespace DACN.Controllers
                 .Select(t => new TagDto
                 {
                     TagId = t.TagId,
-                    Name = t.Name
+                    Name = t.Name,
+                    BookCount = t.StoryTags.Count(b => b.Story.IsDeleted == false)
                 })
                 .ToListAsync();
 

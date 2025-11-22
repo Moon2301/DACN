@@ -24,11 +24,30 @@ namespace DACN.Controllers
         public async Task<ActionResult<IEnumerable<GenreDto>>> GetGenres()
         {
             var genres = await _context.Genres
-                .Where(g => g.IsDeleted == false) // Chỉ lấy các mục chưa bị "xóa"
+                .Where(g => g.IsDeleted == false)
                 .Select(g => new GenreDto
                 {
                     GenreId = g.GenreId,
-                    Name = g.Name
+                    Name = g.Name,
+                    // THÊM LOGIC TÍNH BOOKCOUNT VÀO ĐÂY:
+                    BookCount = g.Stories.Count(b => b.IsDeleted == false)
+                })
+                .ToListAsync();
+
+            return Ok(genres);
+        }
+
+        [HttpGet("deleted")]
+        public async Task<ActionResult<IEnumerable<GenreDto>>> GetDeletedGenres()
+        {
+            var genres = await _context.Genres
+                // 🚨 CHỈ LẤY NHỮNG GENRE ĐÃ BỊ XÓA
+                .Where(g => g.IsDeleted == true)
+                .Select(g => new GenreDto
+                {
+                    GenreId = g.GenreId,
+                    Name = g.Name,
+                    BookCount = g.Stories.Count(b => b.IsDeleted == false)
                 })
                 .ToListAsync();
 

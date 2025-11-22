@@ -1,6 +1,7 @@
 ﻿using DACN.Data;
 using DACN.Dtos;
 using DACN.Models;
+using DACN.Helpers;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -106,6 +107,46 @@ namespace DACN.Controllers
             await _context.SaveChangesAsync();
 
             return Ok("Đã đánh dấu đã đọc.");
+        }
+
+
+        // GET: api/read-history/user/5/summary
+        // Lấy lịch sử TÓM TẮT (mỗi truyện 1 dòng, là chương đọc cuối cùng)
+        [HttpGet("user/{userId}/summary")]
+        public async Task<ActionResult<IEnumerable<ReadHistorySummaryDto>>> GetReadHistorySummary(int userId)
+        {
+            if (!await _context.Users.AnyAsync(u => u.UserId == userId && !u.IsDeleted))
+                return NotFound("Không tìm thấy người dùng.");
+
+            // 1. XÂY DỰNG CÂU QUERY (Chưa chạy)
+            // Lấy tất cả record, include sẵn Chapter và Story
+            var query = _context.ChapterReadedByUsers
+                .Where(r => r.UserId == userId)
+                .Include(r => r.Chapter)
+                    .ThenInclude(c => c.Story);
+
+            // 2. THỰC THI QUERY VÀ TẢI VÀO BỘ NHỚ (Client Evaluation)
+            var allHistoryForUser = await query.ToListAsync();
+
+            // 3. XỬ LÝ TRONG BỘ NHỚ (Dùng LINQ-to-Objects, không còn là SQL)
+            var historySummary = allHistoryForUser
+                .GroupBy(r => r.Chapter.StoryId) // Nhóm theo StoryId
+                .Select(g => g.OrderByDescending(r => r.ReadAt).FirstOrDefault()) // Với mỗi nhóm, lấy cái mới nhất
+                .OrderByDescending(r => r.ReadAt) // Sắp xếp tổng thể
+                .Select(r => new ReadHistorySummaryDto // Map sang DTO
+                {
+                    StoryId = r.Chapter.Story.StoryId,
+                    StoryTitle = r.Chapter.Story.Title,
+                    StoryCoverImage = UrlHelper.ResolveImageUrl( r.Chapter.Story.CoverImage),
+                    LastReadChapterId = r.ChapterId,
+                    LastReadChapterNumber = r.Chapter.ChapterNumber,
+                    LastReadChapterTitle = r.Chapter.Title,
+                    ReadAt = r.ReadAt,
+                    TotalChapters = r.Chapter.Story.TotalChapters
+                })
+                .ToList(); // Dùng .ToList() vì đang chạy trong C#, không phải .ToListAsync()
+
+            return Ok(historySummary);
         }
     }
 }
