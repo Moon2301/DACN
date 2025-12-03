@@ -23,16 +23,18 @@ namespace DACN.Controllers
 
         // Vì query Story DTO rất phức tạp, đưa nó vào 1 IQueryable
         // HÀM HELPER ĐỂ DÙNG CHUNG
-        private IQueryable<Story> GetStoriesAsQueryable( 
-            string? searchTerm = null,
-            int? genreId = null,
-            int? tagId = null,
-            StoryStatus? status = null)
+        private IQueryable<Story> GetStoriesAsQueryable(
+        string? searchTerm = null,
+        int? genreId = null,
+        int? tagId = null,
+        StoryStatus? status = null)
         {
+            // Bắt đầu với các truyện chưa bị xóa
             var query = _context.Stories
-                              .Where(s => s.IsDeleted == false);
+                                .Where(s => s.IsDeleted == false);
 
             // 1. Lọc theo searchTerm
+            // Kiểm tra tính null hoặc chuỗi rỗng
             if (!string.IsNullOrEmpty(searchTerm))
             {
                 var lowerSearchTerm = searchTerm.ToLower();
@@ -41,18 +43,21 @@ namespace DACN.Controllers
             }
 
             // 2. Lọc theo GenreId
+            // Kiểm tra xem có giá trị (không null) không
             if (genreId.HasValue)
             {
                 query = query.Where(s => s.GenreId == genreId.Value);
             }
 
             // 3. Lọc theo TagId
+            // Kiểm tra xem có giá trị (không null) không
             if (tagId.HasValue)
             {
                 query = query.Where(s => s.StoryTags.Any(st => st.TagId == tagId.Value));
             }
 
             // 4. Lọc theo Status
+            // Kiểm tra xem có giá trị (không null) không
             if (status.HasValue)
             {
                 query = query.Where(s => s.Status == status.Value);
@@ -65,21 +70,24 @@ namespace DACN.Controllers
                 .Include(s => s.StoryTags)
                     .ThenInclude(st => st.Tag);
         }
+
         // HÀM MAP DÙNG CHUNG (C#)
         private StoryDto MapToDto(Story s)
         {
+            // ... (logic MapToDto giữ nguyên) ...
+            // Phần này không cần thay đổi
             return new StoryDto
             {
                 StoryId = s.StoryId,
                 Title = s.Title,
                 Author = s.Author,
                 Description = s.Description,
-                CoverImage = UrlHelper.ResolveImageUrl(s.CoverImage), // <-- GỌI HELPER Ở ĐÂY
+                CoverImage = UrlHelper.ResolveImageUrl(s.CoverImage),
                 Status = s.Status,
                 GenreId = s.GenreId,
-                GenreName = s.Genre?.Name, // Thêm ?.Name cho an toàn
+                GenreName = s.Genre?.Name,
                 UploadedByUserId = s.UploadedByUserId,
-                UploadedByUsername = s.UploadedBy?.Username, // Thêm ?.Username
+                UploadedByUsername = s.UploadedBy?.Username,
                 CreatedAt = s.CreatedAt,
                 UpdatedAt = s.UpdatedAt,
                 Tags = s.StoryTags.Select(st => st.Tag.Name).ToList(),
@@ -90,64 +98,90 @@ namespace DACN.Controllers
                 TotalChapters = s.TotalChapters
             };
         }
-        //Hết helper
+        // Hết helper
 
         // GET: api/stories
         // Lấy tất cả truyện (có lọc, tìm kiếm, sắp xếp, phân trang)
         [HttpGet]
-        [AllowAnonymous] 
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<StoryDto>>> GetStories(
-            [FromQuery] string? searchTerm = null,  // Từ khóa tìm kiếm (title, author)
-            [FromQuery] int? genreId = null,       // Lọc theo ID thể loại
-            [FromQuery] int? tagId = null,         // Lọc theo ID tag
-            [FromQuery] StoryStatus? status = null,// Lọc theo trạng thái
-            [FromQuery] string? sortBy = null,      // Sắp xếp (latest, top_reads, ...)
-            [FromQuery] int page = 1,              // Phân trang
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] string? genreId = null,
+            [FromQuery] string? tagId = null,
+            [FromQuery] StoryStatus? status = null,
+            [FromQuery] string? sortBy = null,
+            [FromQuery] int page = 1,
             [FromQuery] int limit = 20)
         {
+            int? finalGenreId = null;
+            int? finalTagId = null;
+
+            // Xử lý GenreId
+            if (!string.IsNullOrEmpty(genreId) && genreId.ToLower() != "null")
+            {
+                if (int.TryParse(genreId, out int gId))
+                {
+                    finalGenreId = gId;
+                }
+            }
+
+            // Xử lý TagId
+            if (!string.IsNullOrEmpty(tagId) && tagId.ToLower() != "null")
+            {
+                if (int.TryParse(tagId, out int tId))
+                {
+                    finalTagId = tId;
+                }
+            }
+
+            //status
+            if (status == StoryStatus.TatCa) status = null;
+
             // 1. Validate phân trang
             if (page <= 0) page = 1;
             if (limit <= 0) limit = 20;
-            if (limit > 100) limit = 100; // Bảo vệ server
+            if (limit > 100) limit = 100;
 
             try
-            {
-                // 1. Lấy IQueryable<Story> (model gốc)
-                var query = GetStoriesAsQueryable(searchTerm, genreId, tagId, status); // <-- Gọi hàm mới
+            {                
+                var query = GetStoriesAsQueryable(searchTerm, finalGenreId, finalTagId, status);
 
-                // 2. Áp dụng SẮP XẾP (trên IQueryable)
+                // 2. Áp dụng SẮP XẾP
                 switch (sortBy?.ToLower())
                 {
                     case "latest":
                         query = query.OrderByDescending(s => s.UpdatedAt);
                         break;
-                    // ... (các case khác) ...
+                    case "top_reads":
+                        query = query.OrderByDescending(s => s.TotalReads);
+                        break;
+                    case "avg_rating":
+                        query = query.OrderByDescending(s => s.AverageRating);
+                        break;
+                    // ... các case khác ...
                     default:
                         query = query.OrderByDescending(s => s.UpdatedAt);
                         break;
                 }
 
-                // 3. Áp dụng PHÂN TRANG (trên IQueryable)
+                // 3. Phân trang & Map DTO (Giữ nguyên)
                 var offset = (page - 1) * limit;
                 var totalStories = await query.CountAsync();
                 var totalPages = (int)Math.Ceiling(totalStories / (double)limit);
 
-                // 4. GỌI DATABASE (CHỈ 1 LẦN)
                 var stories_from_db = await query
                     .Skip(offset)
                     .Take(limit)
                     .ToListAsync();
 
-                // 5. MAP SANG DTO (CHẠY TRONG C#)
                 var dtos = stories_from_db.Select(MapToDto).ToList();
 
-                // 6. Trả về kết quả
                 return Ok(new
                 {
                     success = true,
                     currentPage = page,
                     totalPages = totalPages,
-                    data = dtos // <-- Trả về list DTOs đã map
+                    data = dtos
                 });
             }
             catch (Exception ex)

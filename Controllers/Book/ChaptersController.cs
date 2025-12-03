@@ -47,8 +47,7 @@ namespace DACN.Controllers
         }
 
         // POST: api/stories/5/chapters
-        // Tạo một chương mới cho truyện
-        [HttpPost("/api/stories/{storyId}/chapters")] // Ghi đè route
+        [HttpPost("/api/stories/{storyId}/chapters")]
         public async Task<ActionResult<ChapterDetailDto>> PostChapter(int storyId, ChapterCreateUpdateDto chapterDto)
         {
             var story = await _context.Stories.FindAsync(storyId);
@@ -57,12 +56,25 @@ namespace DACN.Controllers
                 return NotFound("Không tìm thấy truyện.");
             }
 
+            // --- BẮT ĐẦU XỬ LÝ LOGIC CONTENT ---
+            string finalContent = chapterDto.Content;
+
+            if (!string.IsNullOrEmpty(finalContent))
+            {
+                // Cách 1: Nếu bạn muốn lưu xuống DB là dấu xuống dòng văn bản thuần túy (Plain Text)
+                // Dùng "\n" để xuống dòng. Flutter/Web sẽ hiểu là xuống dòng text.
+                finalContent = finalContent.Replace("/n", "\n").Replace("\\n", "\n");
+            }
+            // --- KẾT THÚC XỬ LÝ ---
+
             var newChapter = new Chapter
             {
                 StoryId = storyId,
                 ChapterNumber = chapterDto.ChapterNumber,
                 Title = chapterDto.Title,
-                Content = chapterDto.Content,
+
+                Content = finalContent, 
+
                 IsVip = chapterDto.IsVip,
                 VipUnlockAt = chapterDto.VipUnlockAt,
                 UnlockPriceMoney = chapterDto.UnlockPriceMoney,
@@ -85,7 +97,7 @@ namespace DACN.Controllers
                 StoryId = newChapter.StoryId,
                 ChapterNumber = newChapter.ChapterNumber,
                 Title = newChapter.Title,
-                Content = newChapter.Content, // Trả về content cho lần đầu tạo
+                Content = newChapter.Content,
                 CreatedAt = newChapter.CreatedAt,
                 IsVip = newChapter.IsVip,
                 VipUnlockAt = newChapter.VipUnlockAt,
@@ -93,7 +105,6 @@ namespace DACN.Controllers
                 UnlockPriceActivePoint = newChapter.UnlockPriceActivePoint
             };
 
-            // Trả về route của API "GetChapter" (bên dưới)
             return CreatedAtAction(nameof(GetChapter), new { id = newChapter.ChapterId }, resultDto);
         }
 

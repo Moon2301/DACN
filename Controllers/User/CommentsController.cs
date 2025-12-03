@@ -1,5 +1,6 @@
 ﻿using DACN.Data;
 using DACN.Dtos;
+using DACN.Helpers;
 using DACN.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ namespace DACN.Controllers
                 CreatedAt = comment.CreatedAt,
                 UserId = comment.UserId,
                 Username = comment.User?.Username ?? "Tài khoản đã xóa",
-                AvatarUrl = comment.User?.AvatarUrl,
+                AvatarUrl = UrlHelper.ResolveImageUrl(comment.User?.AvatarUrl),
                 ParentCommentId = comment.ParentCommentId,
                 RepliesCount = comment.RepliesCount // Lấy từ DB
             };
@@ -133,16 +134,22 @@ namespace DACN.Controllers
         }
 
         // POST: api/comments
-        // (Đã cập nhật: Cập nhật RepliesCount)
         [HttpPost]
         public async Task<ActionResult<CommentDto>> PostComment(CommentCreateDto commentDto)
         {
+            // 👇👇👇 [LOGIC MỚI THÊM VÀO] 👇👇👇
+            // Nếu Client gửi ParentCommentId = 0, ta coi như là null (Comment gốc)
+            if (commentDto.ParentCommentId == 0)
+            {
+                commentDto.ParentCommentId = null;
+            }
+            // 👆👆👆 [KẾT THÚC] 👆👆👆
+
             // ... (Logic validation giữ nguyên) ...
             if (!await _context.Users.AnyAsync(u => u.UserId == commentDto.UserId && !u.IsDeleted))
                 return BadRequest("User không tồn tại.");
 
-            // ... (Logic kiểm tra targetCount != 1 giữ nguyên) ...
-
+            // ... (Phần tạo object newComment giữ nguyên) ...
             var newComment = new Comment
             {
                 UserId = commentDto.UserId,
@@ -152,6 +159,7 @@ namespace DACN.Controllers
 
             Story storyToUpdate = null;
 
+            // Lúc này ParentCommentId đã chuẩn (null hoặc ID thật > 0)
             if (commentDto.ParentCommentId.HasValue)
             {
                 // Đây là 1 REPLY
@@ -163,19 +171,21 @@ namespace DACN.Controllers
                 newComment.StoryId = parent.StoryId;
                 newComment.ChapterId = parent.ChapterId;
 
-                // --- LOGIC MỚI ---
                 parent.RepliesCount += 1; // Tăng số lượng con của cha
 
-                // Không tăng TotalComments của Story khi reply
+                // ... (Logic thông báo nếu có) ...
             }
             else
             {
-
+                // Đây là Comment GỐC
                 // Chỉ tăng TotalComments của Story khi là comment GỐC
                 if (commentDto.StoryId.HasValue)
                 {
                     storyToUpdate = await _context.Stories.FindAsync(commentDto.StoryId.Value);
                     if (storyToUpdate != null) storyToUpdate.TotalComments += 1;
+
+                    // Gán StoryId cho comment mới
+                    newComment.StoryId = commentDto.StoryId.Value;
                 }
                 else if (commentDto.ChapterId.HasValue)
                 {
@@ -184,6 +194,10 @@ namespace DACN.Controllers
                     {
                         storyToUpdate = await _context.Stories.FindAsync(chapter.StoryId);
                         if (storyToUpdate != null) storyToUpdate.TotalComments += 1;
+
+                        // Gán ChapterId và StoryId (lấy từ chapter) cho comment mới
+                        newComment.ChapterId = commentDto.ChapterId.Value;
+                        newComment.StoryId = chapter.StoryId;
                     }
                 }
             }
@@ -191,12 +205,15 @@ namespace DACN.Controllers
             _context.Comments.Add(newComment);
             await _context.SaveChangesAsync();
 
-            // Trả về DTO (đã query lại)
+            // Trả về DTO
             var result = await _context.Comments
                 .Include(c => c.User)
                 .FirstAsync(c => c.CommentId == newComment.CommentId);
 
-            return CreatedAtAction(nameof(GetStoryComments), new { storyId = result.StoryId }, MapCommentToDto(result));
+            // Lưu ý: Nếu post vào Chapter thì có thể không có storyId trong result để tạo link GetStoryComments chính xác
+            // nhưng thường GetStoryComments chỉ cần storyId là được.
+            // Nếu newComment.StoryId có giá trị thì dùng nó.
+            return CreatedAtAction(nameof(GetStoryComments), new { storyId = result.StoryId ?? 0 }, MapCommentToDto(result));
         }
 
         // DELETE: api/comments/5

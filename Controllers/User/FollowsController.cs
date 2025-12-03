@@ -19,6 +19,8 @@ namespace DACN.Controllers
 
         // GET: api/follows/user/5
         // Lấy danh sách truyện user đang theo dõi VÀ tiến độ đọc
+        // GET: api/follows/user/5
+        // Lấy danh sách truyện user đang theo dõi VÀ tiến độ đọc (Lấy từ Lịch sử đọc mới nhất)
         [HttpGet("user/{userId}")]
         public async Task<ActionResult<IEnumerable<FollowDto>>> GetFollowedStoriesByUser(int userId)
         {
@@ -27,29 +29,62 @@ namespace DACN.Controllers
                 return NotFound("Không tìm thấy người dùng.");
             }
 
+            // 1. Lấy thông tin FollowedStoryByUser và Story
             var follows = await _context.FollowedStoryByUsers
                 .Where(f => f.UserId == userId)
-                .Include(f => f.Story) // Lấy thông tin Story
-                .Include(f => f.CurrentChapter) // Lấy thông tin Chapter (tiến độ)
-                .Select(f => new FollowDto
+                .Include(f => f.Story)
+                .Select(f => new
                 {
-                    FollowId = f.FollowId,
-                    UserId = f.UserId,
-                    StoryId = f.StoryId,
-                    StoryTitle = f.Story.Title,
-                    StoryCoverImage = f.Story.CoverImage,
-                    StoryStatus = f.Story.Status,
-                    FollowedAt = f.FollowedAt,
-                    TotalStoryChapters = f.Story.TotalChapters,
-                    // --- Đây là logic vàng ---
-                    CurrentChapterId = f.CurrentChapterId,
-                    // Nếu CurrentChapter là null (chưa đọc) thì trả về 0
-                    CurrentChapterNumber = f.CurrentChapter != null ? f.CurrentChapter.ChapterNumber : 0,
-                    CurrentChapterTitle = f.CurrentChapter != null ? f.CurrentChapter.Title : "Chưa đọc"
+                    // Các trường cơ bản (Cần thiết cho DTO)
+                    Follow = f,
+                    Story = f.Story,
+
+                    // 2. SUBQUERY: Lấy chương ĐÃ ĐỌC có ChapterNumber LỚN NHẤT cho Story này
+                    LatestChapterRead = _context.ChapterReadedByUsers
+                        .Where(r => r.UserId == userId && r.Chapter.StoryId == f.StoryId)
+                        .OrderByDescending(r => r.Chapter.ChapterNumber) // Sắp xếp theo số chương giảm dần
+                        .Select(r => r.Chapter) // Chỉ cần lấy object Chapter
+                        .FirstOrDefault() // Lấy cái lớn nhất
                 })
                 .ToListAsync();
 
-            return Ok(follows);
+            // 3. Mapping sang DTO cuối cùng (Trong bộ nhớ)
+            var dtos = follows.Select(f =>
+            {
+                // Ưu tiên: Chương mới nhất trong Lịch sử đọc (f.LatestChapterRead)
+                // Fallback: Nếu lịch sử đọc trống, dùng tiến độ cũ đã lưu trong bảng Follow (f.Follow.CurrentChapter)
+                var latestProgress = f.LatestChapterRead;
+
+                // Nếu không có lịch sử đọc cho truyện này, ta lấy CurrentChapter từ DB (cần phải join/include)
+                // Tuy nhiên, để tránh lỗi N+1, ta sẽ chỉ fallback về ID cũ đã lưu
+                if (latestProgress == null && f.Follow.CurrentChapterId.HasValue)
+                {
+                    // Nếu không có lịch sử, ta thử lấy thông tin của Chapter đã lưu
+                    // Lưu ý: Cần thêm logic để lấy Chapter object từ ID nếu muốn hiển thị Title/Number chính xác
+                    // Tuy nhiên, để giữ query trong 1 lần gọi DB, ta dùng null và 0 như logic cũ
+                }
+
+                // Do CurrentChapter không còn được Include trực tiếp, ta chỉ dựa vào kết quả Subquery
+                return new FollowDto
+                {
+                    FollowId = f.Follow.FollowId,
+                    UserId = f.Follow.UserId,
+                    StoryId = f.Story.StoryId,
+                    StoryTitle = f.Story.Title,
+                    StoryCoverImage = f.Story.CoverImage,
+                    StoryStatus = f.Story.Status,
+                    FollowedAt = f.Follow.FollowedAt,
+                    TotalStoryChapters = f.Story.TotalChapters,
+
+                    // --- LOGIC MỚI ÁP DỤNG ---
+                    // Nếu tìm thấy lịch sử đọc mới nhất, dùng nó để hiển thị
+                    CurrentChapterId = latestProgress?.ChapterId ?? f.Follow.CurrentChapterId,
+                    CurrentChapterNumber = latestProgress?.ChapterNumber ?? 0,
+                    CurrentChapterTitle = latestProgress?.Title ?? "Chưa đọc"
+                };
+            }).ToList();
+
+            return Ok(dtos);
         }
 
         // POST: api/follows

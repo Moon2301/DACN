@@ -83,7 +83,8 @@ namespace DACN.Models
         DangCapNhat,
         TamNgung,
         DaNgung,
-        HoanThanh
+        HoanThanh,
+        TatCa
     }
 
     public class Story
@@ -232,6 +233,7 @@ namespace DACN.Models
         public int ChapterId { get; set; }
         public Chapter? Chapter { get; set; }
         public DateTime ReadAt { get; set; } = DateTime.UtcNow;
+        public bool IsDeleted { get; set; } = false;
     }
 
     public class Notification

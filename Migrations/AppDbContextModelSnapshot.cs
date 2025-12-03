@@ -145,6 +145,9 @@ namespace DACN.Migrations
                     b.Property<int>("ChapterId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
                     b.Property<DateTime>("ReadAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
@@ -764,12 +767,12 @@ namespace DACN.Migrations
                             ActivePoint = 999999,
                             AvatarUrl = "/images/defaul/defaulAvatar.png",
                             Bio = "Default admin account",
-                            CreatedAt = new DateTime(2025, 11, 14, 14, 53, 28, 198, DateTimeKind.Utc).AddTicks(1909),
+                            CreatedAt = new DateTime(2025, 11, 24, 4, 17, 39, 575, DateTimeKind.Utc).AddTicks(1406),
                             Email = "admin@example.com",
                             IsBanned = false,
                             IsDeleted = false,
                             Money = 999999,
-                            PasswordHash = "$2a$11$0o6xws6xNKJZ2BX9oA0z0urUXHZ/Mv6QJM6NgbkUzOWVpnVl/Zjfa",
+                            PasswordHash = "$2a$11$4fq1EhyHXg2MGVkvnmdG4eyi/tuh4D1was8mKxXWliF3yeaqJNLfq",
                             Role = "Admin",
                             Ticket = 0,
                             Username = "admin"

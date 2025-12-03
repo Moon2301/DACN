@@ -27,7 +27,7 @@ namespace DACN.Controllers
                 return NotFound("Không tìm thấy người dùng.");
 
             var history = await _context.ChapterReadedByUsers
-                .Where(r => r.UserId == userId)
+                .Where(r => r.UserId == userId )
                 .Include(r => r.Chapter) // Lấy thông tin Chapter
                 .OrderByDescending(r => r.ReadAt) // Lần đọc cuối cùng lên trước
                 .Select(r => new ChapterReadDto
@@ -84,6 +84,7 @@ namespace DACN.Controllers
             {
                 // 1. ĐÃ ĐỌC RỒI -> Chỉ cập nhật thời gian
                 existingRecord.ReadAt = DateTime.UtcNow;
+                existingRecord.IsDeleted = false; // Nếu trước đó bị xóa thì khôi phục lại
             }
             else
             {
@@ -121,7 +122,7 @@ namespace DACN.Controllers
             // 1. XÂY DỰNG CÂU QUERY (Chưa chạy)
             // Lấy tất cả record, include sẵn Chapter và Story
             var query = _context.ChapterReadedByUsers
-                .Where(r => r.UserId == userId)
+                .Where(r => r.UserId == userId && r.IsDeleted == false)
                 .Include(r => r.Chapter)
                     .ThenInclude(c => c.Story);
 
@@ -147,6 +148,38 @@ namespace DACN.Controllers
                 .ToList(); // Dùng .ToList() vì đang chạy trong C#, không phải .ToListAsync()
 
             return Ok(historySummary);
+        }
+
+        // DELETE: api/readhistory/story/5?userId=1
+        // Xóa lịch sử đọc của cả bộ truyện (Soft Delete)
+        [HttpDelete("story/{storyId}")]
+        public async Task<IActionResult> DeleteHistoryByStory(int storyId, [FromQuery] int userId)
+        {
+            // 1. Tìm tất cả bản ghi lịch sử của User thuộc StoryId này
+            // (Chỉ lấy những cái chưa xóa)
+            var historyItems = await _context.ChapterReadedByUsers
+                .Include(h => h.Chapter) // Include để truy cập được StoryId bên trong Chapter
+                .Where(h => h.UserId == userId &&
+                            h.Chapter.StoryId == storyId &&
+                            h.IsDeleted == false)
+                .ToListAsync();
+
+            if (historyItems == null || !historyItems.Any())
+            {
+                // Không tìm thấy cái nào để xóa thì coi như đã xóa thành công
+                return NoContent();
+            }
+
+            // 2. Duyệt qua list và đánh dấu xóa (Soft Delete)
+            foreach (var item in historyItems)
+            {
+                item.IsDeleted = true;
+            }
+
+            // 3. Lưu thay đổi 1 lần
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
     }
 }
