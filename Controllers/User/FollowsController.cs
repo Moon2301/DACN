@@ -18,8 +18,6 @@ namespace DACN.Controllers
         }
 
         // GET: api/follows/user/5
-        // Lấy danh sách truyện user đang theo dõi VÀ tiến độ đọc
-        // GET: api/follows/user/5
         // Lấy danh sách truyện user đang theo dõi VÀ tiến độ đọc (Lấy từ Lịch sử đọc mới nhất)
         [HttpGet("user/{userId}")]
         public async Task<ActionResult<IEnumerable<FollowDto>>> GetFollowedStoriesByUser(int userId)
@@ -60,11 +58,8 @@ namespace DACN.Controllers
                 if (latestProgress == null && f.Follow.CurrentChapterId.HasValue)
                 {
                     // Nếu không có lịch sử, ta thử lấy thông tin của Chapter đã lưu
-                    // Lưu ý: Cần thêm logic để lấy Chapter object từ ID nếu muốn hiển thị Title/Number chính xác
-                    // Tuy nhiên, để giữ query trong 1 lần gọi DB, ta dùng null và 0 như logic cũ
                 }
 
-                // Do CurrentChapter không còn được Include trực tiếp, ta chỉ dựa vào kết quả Subquery
                 return new FollowDto
                 {
                     FollowId = f.Follow.FollowId,
@@ -79,7 +74,7 @@ namespace DACN.Controllers
                     // --- LOGIC MỚI ÁP DỤNG ---
                     // Nếu tìm thấy lịch sử đọc mới nhất, dùng nó để hiển thị
                     CurrentChapterId = latestProgress?.ChapterId ?? f.Follow.CurrentChapterId,
-                    CurrentChapterNumber = latestProgress?.ChapterNumber ?? 0,
+                    CurrentChapterNumber = latestProgress?.ChapterNumber ?? 1,
                     CurrentChapterTitle = latestProgress?.Title ?? "Chưa đọc"
                 };
             }).ToList();

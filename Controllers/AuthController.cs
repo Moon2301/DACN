@@ -1,8 +1,8 @@
-﻿// Quan trọng: using BCrypt
-using DACN.Data;
+﻿using DACN.Data;
 using DACN.Dtos;
 using DACN.Helpers;
 using DACN.Models;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -81,6 +81,72 @@ namespace DACN.Controllers
             return Ok(authResponse);
         }
 
+        [HttpPost("google-login")]
+        public async Task<ActionResult<AuthResponseDto>> GoogleLogin(GoogleLoginDto googleLoginDto)
+        {
+            GoogleJsonWebSignature.Payload payload;
+
+            try
+            {
+                // 1. Xác thực ID Token Google
+                var validationSettings = new GoogleJsonWebSignature.ValidationSettings
+                {
+                    // Lấy ClientId từ appsettings.json
+                    Audience = new[] { _configuration["Google:ClientId"] }
+                };
+
+                // Hàm ValidateAsync sẽ kiểm tra tính hợp lệ, chữ ký và thời hạn của Token
+                payload = await GoogleJsonWebSignature.ValidateAsync(googleLoginDto.IdToken, validationSettings);
+            }
+            catch (InvalidJwtException)
+            {
+                // Trả về lỗi nếu Token không hợp lệ
+                return BadRequest("ID Token Google không hợp lệ hoặc đã hết hạn.");
+            }
+
+            // 2. Tìm kiếm User theo Email (được trích xuất từ Payload)
+            var email = payload.Email;
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
+
+            // 3. Xử lý User: Đăng ký (nếu chưa có) hoặc Đăng nhập
+            if (user == null)
+            {
+                // Tạo Username ngẫu nhiên và kiểm tra trùng lặp
+                var random = new Random();
+                string baseUsername = payload.Name.Replace(" ", "").ToLower();
+                string uniqueUsername = baseUsername;
+
+                // Vòng lặp đảm bảo Username là duy nhất
+                while (await _context.Users.AnyAsync(u => u.Username == uniqueUsername))
+                {
+                    uniqueUsername = baseUsername + random.Next(100, 999);
+                }
+
+                // Tạo User mới
+                user = new User
+                {
+                    Username = uniqueUsername,
+                    Email = email,
+                    // Đặt mật khẩu giả vì Google Login không dùng mật khẩu
+                    PasswordHash = PasswordHelper.HashPassword(Guid.NewGuid().ToString()),
+                    AvatarUrl = payload.Picture, // Lấy ảnh đại diện từ Google
+                    Role = UserRole.User,
+                };
+
+                _context.Users.Add(user);
+                await _context.SaveChangesAsync();
+            }
+            else if (user.IsBanned)
+            {
+                return StatusCode(403, "Tài khoản của bạn đã bị khóa.");
+            }
+
+            var authResponse = GenerateJwtToken(user);
+            return Ok(authResponse);
+        }
+
+
         // --- HÀM HELPER TẠO TOKEN ---
         [NonAction] // Để Swagger không thấy
         private AuthResponseDto GenerateJwtToken(User user)
@@ -132,5 +198,7 @@ namespace DACN.Controllers
                 AvatarUrl = UrlHelper.ResolveImageUrl(user.AvatarUrl)
             };
         }
+
+
     }
 }

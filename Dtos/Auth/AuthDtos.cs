@@ -41,4 +41,9 @@ namespace DACN.Dtos
         public int Ticket { get; set; }
         public string AvatarUrl { get; set; }
     }
+    public class GoogleLoginDto
+    {
+        [Required]
+        public string IdToken { get; set; } 
+    }
 }

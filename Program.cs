@@ -1,13 +1,14 @@
 ﻿using DACN.Data;
+using DACN.Helpers;
 using DACN.Models;
+using DACN.Services;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Filters;
-using DACN.Helpers;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -104,7 +105,11 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Đăng ký HttpClient cần thiết cho Ollama
+builder.Services.AddHttpClient<OllamaModerationService>();
 
+// Đăng ký Content Moderation Service (chọn OllamaModerationService)
+builder.Services.AddScoped<IContentModerationService, OllamaModerationService>();
 
 var app = builder.Build();
 
@@ -127,6 +132,8 @@ app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+//Chạy service
 
 
 
