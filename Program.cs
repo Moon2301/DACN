@@ -10,6 +10,7 @@ using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Filters;
 using System.Text;
 
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Database Configuration
@@ -107,9 +108,10 @@ builder.Services.AddCors(options =>
 
 // Đăng ký HttpClient cần thiết cho Ollama
 builder.Services.AddHttpClient<OllamaModerationService>();
-
 // Đăng ký Content Moderation Service (chọn OllamaModerationService)
 builder.Services.AddScoped<IContentModerationService, OllamaModerationService>();
+
+
 
 var app = builder.Build();
 
@@ -155,6 +157,10 @@ RecurringJob.AddOrUpdate<HangfireJobService>("phat-ve-hang-tuan",
 RecurringJob.AddOrUpdate<HangfireJobService>("bxh-global",
     job => job.UpdateGlobalRankings(),
     Cron.Daily(3, 0)); // 4h sáng
+RecurringJob.AddOrUpdate<HangfireJobService>(
+    "kiem-duyet-noi-dung-dinh-ky",
+    job => job.ScanPendingChaptersBatch(),
+    Cron.Daily(4, 0));
 
 app.MapControllers();
 app.Run();

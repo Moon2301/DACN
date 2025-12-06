@@ -127,6 +127,12 @@ namespace DACN.Models
         public bool IsDeleted { get; set; } = false;
     }
 
+    public enum ChapterStatus
+    {
+        Unchecked, // 0: Chưa quét (Mặc định khi đăng) - Vẫn cho hiện
+        Safe,      // 1: Đã quét & An toàn
+        Violation  // 2: Vi phạm - Sẽ bị ẩn
+    }
     public class Chapter
     {
         [Key]
@@ -153,6 +159,8 @@ namespace DACN.Models
         public ICollection<Comment> Comments { get; set; }
         public ICollection<ChapterReadedByUser> ChapterReadedByUsers { get; set; }
         public ICollection<UnlockedChapter> Unlocks { get; set; }
+
+        public ChapterStatus Status { get; set; } = ChapterStatus.Unchecked;
     }
     public class Bookmark
     {

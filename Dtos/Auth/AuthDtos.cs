@@ -46,4 +46,30 @@ namespace DACN.Dtos
         [Required]
         public string IdToken { get; set; } 
     }
+
+    public class UserProfileDto
+    {
+        public int UserId { get; set; }
+        public string Username { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+        public string DateOfBirth { get; set; }
+        public string Bio { get; set; }
+        public string AvatarUrl { get; set; }
+        public int Money { get; set; }
+        public int ActivePoint { get; set; }
+        public string Role { get; set; }
+
+        public int TotalChaptersRead { get; set; }     // Tổng số chương đã đọc
+        public int TotalStoriesUploaded { get; set; }  // Tổng số truyện đã đăng
+    }
+
+    public class UpdateProfileDto
+    {
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? DateOfBirth { get; set; }
+        public string? Bio { get; set; }
+        public string? AvatarUrl { get; set; }
+    }
 }

@@ -1,5 +1,6 @@
 ﻿using DACN.Data;
 using DACN.Models;
+using DACN.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 
@@ -8,10 +9,12 @@ public class HangfireJobService
 {
     private readonly AppDbContext _context;
     private const int TimeZoneOffset = 7; // Múi giờ VN (UTC+7)
+    private readonly IContentModerationService _moderationService;
 
-    public HangfireJobService(AppDbContext context)
+    public HangfireJobService(AppDbContext context, IContentModerationService moderationService)
     {
         _context = context;
+        _moderationService = moderationService;
     }
 
     // --- HÀM HELPER: Lấy Thứ Hai Đầu Tuần (Giống DailyReward) ---
@@ -330,4 +333,53 @@ public class HangfireJobService
 
         await _context.SaveChangesAsync();
     }
+
+
+    // --- HÀM MỚI: QUÉT NỘI DUNG ---
+    public async Task ScanPendingChaptersBatch()
+{
+    // 1. Lấy tất cả chương CHƯA QUÉT (Unchecked) và CHƯA XÓA
+    // Dùng Take(50) hoặc Take(100) để tránh quét 1 lần quá nhiều gây treo máy nếu server yếu
+    var pendingChapters = await _context.Chapters
+        .Where(c => c.Status == ChapterStatus.Unchecked && !c.IsDeleted)
+        .Take(50) 
+        .ToListAsync();
+
+    if (!pendingChapters.Any()) return; // Không có gì để quét
+
+    foreach (var chapter in pendingChapters)
+    {
+        try 
+        {
+            // 2. Gộp nội dung
+            string contentToCheck = $"Tiêu đề: {chapter.Title}\nNội dung: {chapter.Content}";
+
+            // 3. Gọi AI quét
+            bool isSafe = await _moderationService.IsContentSafe(contentToCheck);
+
+            // 4. Cập nhật trạng thái
+            if (isSafe)
+            {
+                chapter.Status = ChapterStatus.Safe;
+            }
+            else
+            {
+                    chapter.Status = ChapterStatus.Violation;
+                    chapter.IsDeleted = true;                 
+                // (Optional) Gửi thông báo cho User: "Chương của bạn bị xóa do vi phạm"
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log lỗi nhưng không dừng vòng lặp, để nó quét tiếp chương sau
+            Console.WriteLine($"Lỗi quét chương {chapter.ChapterId}: {ex.Message}");
+        }
+    }
+
+    // 5. Lưu DB một lần sau khi quét xong đợt này
+    await _context.SaveChangesAsync();
+    
+    // (Mẹo) Nếu danh sách còn nhiều, tự gọi lại chính mình để quét tiếp đợt sau
+    // BackgroundJob.Enqueue<HangfireJobService>(s => s.ScanPendingChaptersBatch());
+}
 }

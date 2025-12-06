@@ -3,6 +3,7 @@ using DACN.Dtos;
 using DACN.Helpers;
 using DACN.Models;
 using Google.Apis.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -199,6 +200,82 @@ namespace DACN.Controllers
             };
         }
 
+        [HttpGet("profile")]
+        [Authorize]
+        public async Task<ActionResult<UserProfileDto>> GetProfile()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized("Không tìm thấy thông tin xác thực.");
+
+            int userId = int.Parse(userIdClaim.Value);
+
+            // In ra tất cả các claim đang có trong User
+            foreach (var claim in User.Claims)
+            {
+                Console.WriteLine($"Type: {claim.Type}, Value: {claim.Value}");
+            }
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("Không tìm thấy người dùng.");
+            // 1. Đếm số chương đã đọc (trong bảng lịch sử đọc)
+            int readCount = await _context.ChapterReadedByUsers
+                                    .CountAsync(x => x.UserId == userId);
+
+            // 2. Đếm số truyện đã đăng (do user này upload và chưa bị xóa)
+            int uploadedCount = await _context.Stories
+                                    .CountAsync(s => s.UploadedByUserId == userId && !s.IsDeleted);
+
+            var profileDto = new UserProfileDto
+            {
+                UserId = user.UserId,
+                Username = user.Username,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                DateOfBirth = user.DateOfBirth,
+                Bio = user.Bio,
+                AvatarUrl = user.AvatarUrl,
+                Money = user.Money,
+                ActivePoint = user.ActivePoint,
+                Role = user.Role.ToString(),
+
+                TotalChaptersRead = readCount,
+                TotalStoriesUploaded = uploadedCount
+            };
+
+            return Ok(profileDto);
+        }
+
+        // 2. API SỬA THÔNG TIN CÁ NHÂN (PUT)
+        [HttpPut("profile")]
+        [Authorize] 
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto request)
+        {
+            // Lấy UserID từ Token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized("Không tìm thấy thông tin xác thực.");
+
+            int userId = int.Parse(userIdClaim.Value);
+
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("Không tìm thấy người dùng.");
+
+            if (request.Email != null) user.Email = request.Email;
+            if (request.PhoneNumber != null) user.PhoneNumber = request.PhoneNumber;
+            if (request.DateOfBirth != null) user.DateOfBirth = request.DateOfBirth;
+            if (request.Bio != null) user.Bio = request.Bio;
+            if (request.AvatarUrl != null) user.AvatarUrl = request.AvatarUrl;
+
+            // Lưu vào DB
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Cập nhật thông tin thành công!" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Lỗi khi lưu dữ liệu: " + ex.Message });
+            }
+        }
 
     }
 }

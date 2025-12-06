@@ -72,18 +72,34 @@ namespace DACN.Dtos
     // DTO để cập nhật User (ví dụ: admin cập nhật)
     public class UserUpdateDto
     {
-        // Admin có thể không được phép đổi Username
-
         [EmailAddress]
         public string Email { get; set; }
 
         public string? PhoneNumber { get; set; }
         public string? DateOfBirth { get; set; }
         public string? Bio { get; set; }
-        public UserRole Role { get; set; }
-        public string? AvatarUrl { get; set; }
-        public bool IsBanned { get; set; }
-        public DateTime? BannedUntil { get; set; }
+    }
+
+    // DTO cho chức năng Khóa/Mở khóa
+    public class LockUserDto
+    {
+        public bool IsBanned { get; set; } // true = Khóa, false = Mở
+        public int? DurationDays { get; set; } // Số ngày khóa (null = khóa vĩnh viễn)
+        public string? Reason { get; set; } // Lý do (tùy chọn)
+    }
+
+    // DTO cho chức năng Cộng/Trừ tiền
+    public class AddBalanceDto
+    {
+        public int Amount { get; set; } // Số lượng (Dương = Cộng, Âm = Trừ)
+        public BalanceType Type { get; set; } // Loại: Money, ActivePoint, Ticket
+    }
+
+    public enum BalanceType
+    {
+        Money,
+        ActivePoint,
+        Ticket
     }
 
     // DTO để hiển thị (RẤT QUAN TRỌNG)
@@ -203,6 +219,12 @@ namespace DACN.Dtos
         public DateTime? VipUnlockAt { get; set; }
         public int UnlockPriceMoney { get; set; } = 0;
         public int UnlockPriceActivePoint { get; set; } = 0;
+    }
+
+    public class ChapterApproved
+    {
+        public ChapterStatus Status { get; set; } 
+
     }
 
     // DTO để HIỂN THỊ (lấy danh sách bookmark của user)

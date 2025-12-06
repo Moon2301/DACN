@@ -4,6 +4,7 @@ using DACN.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DACN.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251204063143_AddChapterStatus")]
+    partial class AddChapterStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -770,12 +773,12 @@ namespace DACN.Migrations
                             ActivePoint = 999999,
                             AvatarUrl = "/images/defaul/defaulAvatar.png",
                             Bio = "Default admin account",
-                            CreatedAt = new DateTime(2025, 12, 5, 5, 25, 32, 848, DateTimeKind.Utc).AddTicks(4594),
+                            CreatedAt = new DateTime(2025, 12, 4, 6, 31, 40, 532, DateTimeKind.Utc).AddTicks(8908),
                             Email = "admin@example.com",
                             IsBanned = false,
                             IsDeleted = false,
                             Money = 999999,
-                            PasswordHash = "$2a$11$xa5l9SjLjN8BUzYIAvoBiuLsvaPxeKfsz0n0vDF3lpYRFCX0kg/Oa",
+                            PasswordHash = "$2a$11$AMSDcBwtHu7m3NHO2Hd2x.toiEiIHUwuOEZ8e.ovQKR1y4NIjVnuW",
                             Role = "Admin",
                             Ticket = 0,
                             Username = "admin"
